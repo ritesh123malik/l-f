@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LNMIIT Lost & Found</title>
+    
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkxOTUlJVCBMb3N0ICYgRm91bmQiLAogICJzaG9ydF9uYW1lIjogIkxvc3QmRm91bmQiLAogICJzdGFydF91cmwiOiAiLyIsCiAgImRpc3BsYXkiOiAiYnJvd3NlciIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBmMTcyYSIKfQ==">
+
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <script src='https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js'></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { 
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        display: ['"Outfit"', 'sans-serif']
+                    },
+                    animation: { 
+                        'float': 'float 8s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'shimmer': 'shimmer 2.5s infinite linear'
+                    },
+                    keyframes: { 
+                        float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-15px)' } },
+                        shimmer: { '0%': { transform: 'translateX(-100%)' }, '100%': { transform: 'translateX(100%)' } }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* --- NEXT LEVEL UI STYLING --- */
+        body { 
+            background-color: #020617; 
+            color: #f1f5f9; 
+            -webkit-tap-highlight-color: transparent; 
+            overflow-x: hidden; 
+        }
+
+        /* Ambient Background */
+        .bg-blob-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; overflow: hidden; pointer-events: none; }
+        .blob { position: absolute; filter: blur(90px); opacity: 0.4; border-radius: 50%; mix-blend-mode: screen; }
+        .blob-1 { top: -10%; left: -20%; width: 600px; height: 600px; background: #4f46e5; animation: float 10s infinite; }
+        .blob-2 { bottom: -10%; right: -20%; width: 700px; height: 700px; background: #db2777; animation: float 14s infinite reverse; }
+        .bg-grid { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; 
+            background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); 
+            background-size: 30px 30px; 
+            pointer-events: none;
+        }
+
+        /* Glassmorphism Refined */
+        .glass {
+            background: rgba(15, 23, 42, 0.65); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .glass-high-contrast {
+            background: rgba(30, 41, 59, 0.85); 
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        /* Form Elements */
+        input, select, textarea {
+            background: rgba(2, 6, 23, 0.5) !important; 
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: white !important; 
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        input:focus, select:focus, textarea:focus { 
+            border-color: #818cf8 !important; 
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15); 
+            background: rgba(2, 6, 23, 0.8) !important;
+            transform: translateY(-1px);
+        }
+        
+        /* Buttons */
+        .btn-primary { 
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); 
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .btn-primary::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(255,255,255,0.2), transparent);
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .btn-primary:hover { box-shadow: 0 0 25px rgba(99, 102, 241, 0.5); transform: translateY(-2px); }
+        .btn-primary:hover::after { opacity: 1; }
+        .btn-primary:active { transform: scale(0.98); }
+
+        /* Tilt & Login */
+        .tilt-card { transform-style: preserve-3d; transform: perspective(1000px); }
+        .tilt-inner { transform: translateZ(20px); }
+        .cursor { display: inline-block; width: 2px; height: 1.2em; background-color: #818cf8; margin-left: 2px; animation: blink 1s infinite; vertical-align: middle; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        /* Scrollbar Hiding */
+        .tab-scroll::-webkit-scrollbar { display: none; }
+        .tab-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .hidden-ui { display: none !important; }
+        .fade-in { animation: fadeInUp 0.5s ease-out forwards; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Map Styling - Google Hybrid */
+        #map, #adminMap { height: 300px; width: 100%; border-radius: 1rem; z-index: 1; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen" onmousemove="handleTilt(event)">
+
+    <div class="bg-blob-container"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
+    <div class="bg-grid"></div>
+
+    <nav class="fixed top-0 w-full z-50 px-4 py-4 backdrop-blur-md border-b border-white/5 transition-all duration-300">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3 group cursor-pointer">
+                <div class="bg-white/10 p-2.5 rounded-xl border border-white/10 group-hover:bg-indigo-500 group-hover:border-indigo-400 transition-all duration-300 shadow-lg">
+                    <i class="fa-solid fa-cube text-xl text-indigo-400 group-hover:text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-display font-bold text-white tracking-tight">LNMIIT<span class="text-indigo-400">Portal</span></h1>
+                    <p class="text-[10px] text-gray-400 font-medium tracking-widest uppercase">Lost & Found</p>
+                </div>
+            </div>
+            <div id="userControls" class="hidden-ui flex items-center gap-3">
+                <span id="userEmailDisplay" class="hidden md:block text-xs font-mono text-indigo-200 bg-indigo-500/20 px-3 py-1.5 rounded-full border border-indigo-500/30"></span>
+                <button onclick="logout()" class="text-gray-400 hover:text-red-400 hover:bg-red-400/10 p-2.5 rounded-lg transition-all"><i class="fa-solid fa-power-off"></i></button>
+            </div>
+        </div>
+    </nav>
+
+    <div id="authScreen" class="flex-grow flex justify-center items-center p-4 relative overflow-hidden pt-20">
+        <i class="fa-solid fa-compass absolute top-1/3 left-[15%] text-indigo-500/10 text-8xl animate-float"></i>
+        <i class="fa-solid fa-magnifying-glass-location absolute bottom-1/3 right-[15%] text-pink-500/10 text-9xl animate-float" style="animation-delay: -2s;"></i>
+
+        <div id="loginCard" class="glass-high-contrast p-8 md:p-12 rounded-[2rem] w-full max-w-md text-center relative overflow-hidden tilt-card shadow-2xl shadow-indigo-900/40">
+            <div class="tilt-inner">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-6">
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    <p id="greeting" class="text-xs font-bold text-gray-300 uppercase tracking-wider">Welcome</p>
+                </div>
+                
+                <h2 class="text-5xl font-display font-bold text-white mb-3 tracking-tight">Recover.<br><span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Return.</span></h2>
+                
+                <div class="h-8 mb-10 flex justify-center items-center gap-1">
+                    <span id="typewriter" class="text-lg text-gray-400 font-light"></span><span class="cursor"></span>
+                </div>
+
+                <div class="space-y-4">
+                    <button onclick="handleGoogleLogin()" class="group relative w-full bg-white hover:bg-gray-50 text-slate-900 font-bold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-1 overflow-hidden">
+                        <div class="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/80 to-transparent -translate-x-full group-hover:animate-shimmer"></div>
+                        <i class="fa-brands fa-google text-red-500 text-xl"></i> 
+                        <span class="font-display">Continue with LNMIIT ID</span>
+                    </button>
+                    <p class="text-[10px] text-gray-500 font-medium">SECURE CAMPUS ACCESS • @lnmiit.ac.in ONLY</p>
+                </div>
+
+                <div class="mt-10 pt-6 border-t border-white/5 flex justify-between px-4">
+                    <div class="text-center">
+                        <p class="text-xl font-bold text-white">500+</p>
+                        <p class="text-[10px] text-gray-500 uppercase font-bold">Items Found</p>
+                    </div>
+                    <div class="h-8 w-px bg-white/10"></div>
+                    <div class="text-center">
+                        <p class="text-xl font-bold text-white text-emerald-400">24/7</p>
+                        <p class="text-[10px] text-gray-500 uppercase font-bold">Live Portal</p>
+                    </div>
+                    <div class="h-8 w-px bg-white/10"></div>
+                    <div class="text-center">
+                        <p class="text-xl font-bold text-white">100%</p>
+                        <p class="text-[10px] text-gray-500 uppercase font-bold">Secure</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="appScreen" class="hidden-ui max-w-7xl mx-auto p-4 w-full fade-in pb-32 pt-24">
+        
+        <div class="glass p-2 rounded-full mb-8 flex overflow-x-auto tab-scroll gap-2 sticky top-24 z-40 mx-auto max-w-2xl shadow-2xl shadow-indigo-900/20 border border-white/10">
+            <button onclick="switchTab('report')" id="tab-report" class="flex-1 flex items-center justify-center gap-2 btn-primary px-6 py-3 rounded-full text-sm font-bold text-white shadow-lg transition-all"><i class="fa-solid fa-plus-circle"></i> <span class="hidden md:inline">Report Item</span></button>
+            <button onclick="switchTab('feed')" id="tab-feed" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-bold text-gray-400 hover:text-white hover:bg-white/10 transition-all"><i class="fa-solid fa-stream"></i> <span class="hidden md:inline">Live Feed</span></button>
+            <button onclick="switchTab('qr')" id="tab-qr" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-bold text-gray-400 hover:text-white hover:bg-white/10 transition-all"><i class="fa-solid fa-qrcode"></i> <span class="hidden md:inline">My Tags</span></button>
+            <button onclick="switchTab('support')" id="tab-support" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-bold text-gray-400 hover:text-white hover:bg-white/10 transition-all"><i class="fa-solid fa-headset"></i></button>
+            <button onclick="switchTab('admin')" id="tab-admin" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-bold text-red-400 hover:bg-red-500/10 transition-all hidden-ui"><i class="fa-solid fa-shield-halved"></i></button>
+        </div>
+
+        <div id="view-report" class="fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 glass-high-contrast p-8 rounded-3xl border border-white/5">
+                    <h2 class="text-2xl font-display font-bold text-white mb-6 flex items-center gap-3">
+                        <span class="bg-indigo-500 w-2 h-8 rounded-full"></span> Submit a Report
+                    </h2>
+                    <form onsubmit="submitReport(event)" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="group">
+                                <label class="text-xs font-bold text-gray-400 uppercase ml-1 mb-2 block group-hover:text-indigo-400 transition">What happened?</label>
+                                <select id="r_type" class="w-full p-4 outline-none cursor-pointer" onchange="checkSentinel()">
+                                    <option value="Lost">I Lost Something 😟</option>
+                                    <option value="Found">I Found Something 🕵️</option>
+                                </select>
+                            </div>
+                            <div class="group">
+                                <label class="text-xs font-bold text-gray-400 uppercase ml-1 mb-2 block group-hover:text-indigo-400 transition">Item Name</label>
+                                <input id="r_item" type="text" placeholder="e.g. Blue Hydroflask" required class="w-full p-4 outline-none" onkeyup="checkSentinel()">
+                            </div>
+                        </div>
+
+                        <div id="sentinelAlert" class="hidden-ui bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-2xl flex items-center gap-4 animate-pulse-slow">
+                            <div class="bg-emerald-500/20 p-3 rounded-full"><i class="fa-solid fa-bell text-emerald-400"></i></div>
+                            <div class="text-sm">
+                                <p class="font-bold text-emerald-300">Wait! We found a match.</p>
+                                <p class="text-emerald-400/60 text-xs cursor-pointer hover:underline" onclick="switchTab('feed')">Someone might have already reported this item.</p>
+                            </div>
+                        </div>
+
+                        <div class="relative group">
+                            <input type="file" id="r_image" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleSmartUpload(this)">
+                            <div class="border-2 border-dashed border-gray-600 rounded-2xl p-8 text-center group-hover:border-indigo-500 group-hover:bg-indigo-500/5 transition-all">
+                                <div class="mb-4 bg-gray-800 w-16 h-16 mx-auto rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <i class="fa-solid fa-camera text-2xl text-gray-400 group-hover:text-indigo-400"></i>
+                                </div>
+                                <span id="fileLabel" class="text-sm font-bold text-gray-300 block">Tap to upload photo</span>
+                                <span class="text-xs text-gray-500">AI will auto-detect object & text</span>
+                            </div>
+                            <p id="aiStatus" class="hidden-ui mt-3 text-xs font-bold text-indigo-400 text-center"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> AI Analyzing...</p>
+                            <img id="aiPreview" class="hidden mt-4 h-40 mx-auto rounded-xl object-cover border border-white/10 shadow-lg">
+                        </div>
+
+                        <div class="relative group">
+                            <label class="text-xs font-bold text-gray-400 uppercase ml-1 mb-2 block group-hover:text-indigo-400 transition">Description</label>
+                            <textarea id="r_desc" rows="3" placeholder="Distinguishing features, location..." required class="w-full p-4 outline-none"></textarea>
+                            <button type="button" onclick="startDictation()" class="absolute right-3 bottom-3 p-2 text-gray-500 hover:text-indigo-400 transition bg-gray-900/50 rounded-lg"><i class="fa-solid fa-microphone" id="micIcon"></i></button>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs font-bold text-gray-400 uppercase ml-1 mb-2 block">WhatsApp (Optional)</label>
+                            <div class="relative">
+                                <i class="fa-brands fa-whatsapp absolute left-4 top-4 text-green-500 text-lg"></i>
+                                <input id="r_phone" type="number" placeholder="9876543210" class="w-full p-4 pl-12 outline-none">
+                            </div>
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="btn-primary w-full py-4 rounded-xl font-bold text-white shadow-lg flex justify-center items-center gap-2 text-lg">
+                            <span>Post Report</span> <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="glass-high-contrast p-6 rounded-3xl h-fit border border-white/5">
+                    <h3 class="font-bold text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-map-pin text-indigo-400"></i> Pin Location</h3>
+                    <div id="map" class="shadow-inner border border-white/10"></div>
+                    <input type="hidden" id="r_lat"><input type="hidden" id="r_lng">
+                    <div id="loc_status" class="hidden-ui mt-3 bg-green-500/20 text-green-400 px-4 py-2 rounded-lg text-xs font-bold text-center border border-green-500/20">
+                        <i class="fa-solid fa-check mr-1"></i> Location Locked
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-feed" class="hidden-ui fade-in">
+            <div class="flex flex-col lg:flex-row gap-8">
+                <div class="flex-grow">
+                    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 glass p-4 rounded-2xl border border-white/5">
+                        <div class="relative w-full">
+                            <i class="fa-solid fa-search absolute left-4 top-3.5 text-gray-500"></i>
+                            <input type="text" id="feedSearch" onkeyup="renderFeed()" placeholder="What are you looking for?" class="w-full pl-12 p-3 rounded-xl text-sm bg-transparent border-none focus:ring-0 focus:bg-white/5">
+                        </div>
+                        <div class="flex gap-2 w-full md:w-auto">
+                            <select id="feedFilter" onchange="renderFeed()" class="p-3 rounded-xl text-sm font-bold bg-slate-900 border-none cursor-pointer flex-grow md:flex-grow-0">
+                                <option value="All">All Items</option>
+                                <option value="Lost">Lost Only</option>
+                                <option value="Found">Found Only</option>
+                            </select>
+                            <button onclick="fetchData()" class="p-3 bg-indigo-500/10 rounded-xl hover:bg-indigo-500/20 text-indigo-400 transition-colors"><i class="fa-solid fa-rotate"></i></button>
+                        </div>
+                    </div>
+                    
+                    <div id="feedGrid" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
+                </div>
+
+                <div class="w-full lg:w-80 flex-shrink-0">
+                    <div class="glass-high-contrast p-6 rounded-3xl border border-white/5 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fa-solid fa-trophy text-6xl text-yellow-500"></i></div>
+                        <h3 class="font-bold text-white mb-6 text-lg">Top Finders 🏆</h3>
+                        <ul id="leaderboardList" class="space-y-3"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-qr" class="hidden-ui fade-in">
+            <div class="glass-high-contrast max-w-lg mx-auto p-10 rounded-[2.5rem] text-center border border-white/5 relative overflow-hidden">
+                <div class="absolute -top-20 -left-20 w-40 h-40 bg-cyan-500 blur-[80px] opacity-20"></div>
+                
+                <div class="inline-block p-5 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl mb-6 shadow-xl shadow-cyan-500/20 transform rotate-3 hover:rotate-0 transition-transform">
+                    <i class="fa-solid fa-qrcode text-4xl text-white"></i>
+                </div>
+                <h2 class="text-3xl font-display font-bold text-white mb-3">Smart Tags</h2>
+                <p class="text-sm text-gray-400 mb-8 leading-relaxed">Protect your valuables. Generate a QR code, stick it on your calculator or laptop. If found, the finder can email you instantly.</p>
+                
+                <div class="bg-black/30 p-1 rounded-2xl backdrop-blur-sm border border-white/5 mb-6">
+                    <input type="text" id="qr_item" placeholder="Item Name (e.g. Casio fx-991)" class="w-full p-4 rounded-xl text-center text-sm bg-transparent border-none focus:bg-white/5">
+                </div>
+                
+                <button onclick="createQR()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-4 rounded-xl transition shadow-lg shadow-cyan-500/20">Generate My Tag</button>
+
+                <div id="qr_output" class="hidden-ui mt-8 bg-white p-6 rounded-2xl inline-block shadow-2xl relative group">
+                    <canvas id="qrcode_canvas"></canvas>
+                    <p class="text-gray-900 font-bold text-xs mt-3 uppercase tracking-widest">Scan to Return</p>
+                    
+                    <div class="absolute inset-0 bg-black/80 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                        <button onclick="printQR()" class="text-white font-bold flex flex-col items-center gap-2">
+                            <i class="fa-solid fa-print text-2xl"></i> Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-support" class="hidden-ui fade-in">
+             <div class="glass-high-contrast max-w-4xl mx-auto p-10 rounded-[2.5rem] text-center border border-white/5">
+                <h2 class="text-3xl font-display font-bold text-white mb-10">Campus Support</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="p-8 bg-slate-900/50 rounded-3xl border border-white/5 hover:border-indigo-500/50 hover:bg-slate-900/80 transition-all group">
+                        <div class="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-user-shield text-2xl text-indigo-400"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-1">Hamendra Yadav</h3>
+                        <p class="text-indigo-300 text-xs font-bold uppercase tracking-wide mb-4">President, Gymkhana</p>
+                        <a href="tel:8890605538" class="text-gray-400 hover:text-white text-sm bg-white/5 px-4 py-2 rounded-lg transition">📞 +91 88906 05538</a>
+                    </div>
+                    <div class="p-8 bg-slate-900/50 rounded-3xl border border-white/5 hover:border-purple-500/50 hover:bg-slate-900/80 transition-all group">
+                        <div class="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-server text-2xl text-purple-400"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-1">Tech Support</h3>
+                        <p class="text-purple-300 text-xs font-bold uppercase tracking-wide mb-4">System Admin</p>
+                        <a href="mailto:arss@lnmiit.ac.in" class="text-gray-400 hover:text-white text-sm bg-white/5 px-4 py-2 rounded-lg transition">📧 arss@lnmiit.ac.in</a>
+                    </div>
+                </div>
+             </div>
+        </div>
+
+        <div id="view-admin" class="hidden-ui fade-in space-y-8">
+            <div class="glass-high-contrast p-8 rounded-3xl border border-white/5">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-white"><i class="fa-solid fa-lock text-red-500 mr-2"></i>Admin Console</h2>
+                    <span class="text-[10px] bg-red-500/10 text-red-400 px-3 py-1 rounded-full border border-red-500/20 font-bold uppercase tracking-wider">Restricted Area</span>
+                </div>
+                
+                <div class="bg-slate-900 rounded-2xl overflow-hidden border border-white/10 relative h-72 mb-8 shadow-2xl">
+                    <div id="adminMap" class="w-full h-full"></div>
+                    <div class="absolute top-4 right-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded-lg text-xs font-bold text-white border border-white/10 z-[400] shadow-lg">
+                        <i class="fa-solid fa-fire text-orange-500 mr-1"></i> Heatmap Active
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div class="p-6 bg-slate-900/50 rounded-2xl border border-white/5">
+                        <h3 class="font-bold text-indigo-400 mb-4 text-sm uppercase tracking-wide">📢 Broadcast Alert</h3>
+                        <input id="bc_sub" placeholder="Subject Line" class="w-full mb-3 p-3 text-sm">
+                        <textarea id="bc_msg" placeholder="Write message to all users..." rows="3" class="w-full mb-4 p-3 text-sm"></textarea>
+                        <button onclick="sendBroadcast()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-sm transition shadow-lg">Send Blast</button>
+                     </div>
+                     
+                     <div class="p-6 bg-slate-900/50 rounded-2xl border border-white/5 flex flex-col justify-center items-center relative">
+                        <h3 class="absolute top-6 left-6 font-bold text-gray-400 text-sm uppercase tracking-wide">Analytics</h3>
+                        <div class="w-48 h-48 mt-4">
+                            <canvas id="statsChart"></canvas>
+                        </div>
+                        <button onclick="downloadCSV()" class="mt-6 text-xs font-bold text-gray-400 hover:text-white flex items-center gap-2 bg-white/5 px-4 py-2 rounded-lg transition"><i class="fa-solid fa-file-csv"></i> Export Data</button>
+                     </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+
+        // --- CONFIGURATION ---
+        const API_URL = "https://script.google.com/macros/s/AKfycbyzXhUTnQhZu9iLANXBfVrxnv4l31qtENXXqg3T6Pf0VOVEVjG_2G9s_6wZrxFOBcRm/exec"; 
+        const CLOUD_NAME = "dbxpn84zn"; 
+        const UPLOAD_PRESET = "ml_preset"; 
+        const ADMIN_EMAILS = ["riteshmalik21092005@gmail.com", "25ucc171@lnmiit.ac.in", "25ucs138@lnmiit.ac.in"]; 
+        const CAMPUS_CENTER = [26.9363, 75.9235];
+
+        const firebaseConfig = {
+           apiKey: "AIzaSyCxV_JiHEMykTyLyW2ba9VtOHcsPu61-JU",
+           authDomain: "lost-b55d8.firebaseapp.com",
+           projectId: "lost-b55d8",
+           storageBucket: "lost-b55d8.firebasestorage.app",
+           messagingSenderId: "805227872638",
+           appId: "1:805227872638:web:eee07259ee3da97b51732f"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+        let globalData = [];
+        let mapInstance = null;
+        let markerInstance = null;
+        let adminMapInstance = null;
+        let aiModel = null; 
+
+        // --- UX Functions ---
+        function setGreeting() {
+            const h = new Date().getHours();
+            const g = h < 12 ? "Good Morning" : h < 18 ? "Good Afternoon" : "Good Evening";
+            const el = document.getElementById('greeting');
+            if(el) el.innerText = `${g}, LNMIITian`;
+        }
+
+        const phrases = ["Lost your ID Card?", "Found a Phone?", "Reconnect here."];
+        let pIndex = 0, charIndex = 0, isDeleting = false;
+        function typeWriter() {
+            const current = phrases[pIndex];
+            const el = document.getElementById('typewriter');
+            if(!el) return;
+            if (!isDeleting && charIndex <= current.length) {
+                el.innerText = current.substring(0, charIndex++);
+                setTimeout(typeWriter, 100);
+            } else if (isDeleting && charIndex >= 0) {
+                el.innerText = current.substring(0, charIndex--);
+                setTimeout(typeWriter, 50);
+            } else {
+                isDeleting = !isDeleting;
+                if (!isDeleting) pIndex = (pIndex + 1) % phrases.length;
+                setTimeout(typeWriter, 2000);
+            }
+        }
+
+        window.handleTilt = (e) => {
+            const card = document.getElementById('loginCard');
+            if (!card || card.offsetParent === null) return; 
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const rotateX = ((y - centerY) / centerY) * -8; 
+            const rotateY = ((x - centerX) / centerX) * 8;
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        };
+
+        document.addEventListener('DOMContentLoaded', () => { setGreeting(); typeWriter(); });
+
+        // --- AUTH & LOGIC ---
+        window.handleGoogleLogin = async () => {
+            try {
+                const res = await signInWithPopup(auth, provider);
+                const email = res.user.email;
+                if (!email.endsWith('@lnmiit.ac.in') && !ADMIN_EMAILS.includes(email)) {
+                    await signOut(auth);
+                    alert("🚫 Access Restricted: Please use LNMIIT Email");
+                    return;
+                }
+                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "REGISTER_USER", email: email }) }).catch(e=>{});
+            } catch (e) { alert(e.message); }
+        };
+
+        window.logout = () => signOut(auth);
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('authScreen').classList.add('hidden-ui');
+                document.getElementById('appScreen').classList.remove('hidden-ui');
+                document.getElementById('userControls').classList.remove('hidden-ui');
+                document.getElementById('userEmailDisplay').innerText = user.email.split('@')[0];
+                if (ADMIN_EMAILS.includes(user.email)) document.getElementById('tab-admin').classList.remove('hidden-ui');
+                window.fetchData();
+                setTimeout(initMap, 1000);
+            } else {
+                document.getElementById('authScreen').classList.remove('hidden-ui');
+                document.getElementById('appScreen').classList.add('hidden-ui');
+                document.getElementById('userControls').classList.add('hidden-ui');
+                const card = document.getElementById('loginCard'); if(card) card.style.transform = 'none';
+            }
+        });
+
+        window.fetchData = async () => {
+            try {
+                const res = await fetch(API_URL);
+                const json = await res.json();
+                let data = [];
+                if(json.status === "success") data = json.data; else if(Array.isArray(json)) data = json;
+                globalData = data;
+                renderFeed();
+                renderLeaderboard();
+                if(ADMIN_EMAILS.includes(currentUser?.email)) initAdminMap();
+            } catch(e) { console.error(e); }
+        };
+
+        window.renderFeed = () => {
+            const container = document.getElementById('feedGrid');
+            const search = document.getElementById('feedSearch').value.toLowerCase();
+            const filter = document.getElementById('feedFilter').value;
+            container.innerHTML = "";
+            
+            const filtered = globalData.filter(item => {
+                const matchesSearch = (item.item.toLowerCase().includes(search) || item.desc.toLowerCase().includes(search));
+                const matchesType = (filter === "All" || item.type === filter);
+                return matchesSearch && matchesType && item.status !== 'Resolved';
+            });
+
+            if(filtered.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-20 text-gray-500 flex flex-col items-center"><i class="fa-solid fa-wind text-4xl mb-4 opacity-50"></i><p>All quiet on campus!</p><p class="text-xs mt-2">No items match your search.</p></div>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                const isLost = item.type === 'Lost';
+                const colorClass = isLost ? 'text-red-400 bg-red-400/10 border border-red-400/20' : 'text-emerald-400 bg-emerald-400/10 border border-emerald-400/20';
+                
+                let imageHtml = "";
+                if(item.image && item.image.startsWith("http")) {
+                    imageHtml = `<div class="relative overflow-hidden h-56 w-full mb-4 rounded-xl group-hover:scale-[1.02] transition-transform duration-500"><img src="${item.image}" class="w-full h-full object-cover cursor-pointer hover:opacity-90" onclick="window.open('${item.image}')"></div>`;
+                }
+
+                let descText = item.desc;
+                let whatsappLink = "";
+                if(item.desc.includes("Phone:")) {
+                   const parts = item.desc.split("Phone:");
+                   descText = parts[0];
+                   const phone = parts[1].trim();
+                   whatsappLink = `<a href="https://wa.me/${phone}?text=Regarding: ${item.item}" target="_blank" class="px-3 py-1.5 rounded-full bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition text-xs font-bold flex items-center gap-1.5"><i class="fa-brands fa-whatsapp"></i> Chat</a>`;
+                }
+
+                let mapBtn = (item.lat && item.lng) ? `<a href="https://www.google.com/maps?q=${item.lat},${item.lng}" target="_blank" class="px-3 py-1.5 rounded-full bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-map-pin"></i> Loc</a>` : "";
+                let pdfBtn = isLost ? `<button onclick="generatePoster('${encodeURIComponent(JSON.stringify(item))}')" class="px-3 py-1.5 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-print"></i> PDF</button>` : "";
+                let shareBtn = `<a href="https://twitter.com/intent/tweet?text=LNMIIT Lost&Found: ${item.type} ${item.item}" target="_blank" class="px-3 py-1.5 rounded-full bg-blue-400/10 text-blue-400 hover:bg-blue-400 hover:text-white transition text-xs font-bold"><i class="fa-brands fa-twitter"></i></a>`;
+                
+                let resolveBtn = "";
+                if(ADMIN_EMAILS.includes(currentUser?.email)) {
+                    resolveBtn = `<button onclick="resolveItem(${item.rowIndex})" class="absolute top-4 right-4 z-20 text-xs font-bold text-green-400 bg-green-900/80 backdrop-blur border border-green-500/30 px-3 py-1 rounded-full hover:bg-green-500 hover:text-white transition">Mark Solved</button>`;
+                }
+
+                const card = `
+                    <div class="glass p-5 rounded-[1.5rem] hover:bg-slate-800/60 transition-all duration-300 group relative border border-white/5 hover:border-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/10">
+                        ${resolveBtn}
+                        ${imageHtml}
+                        <div class="flex justify-between items-start mb-3">
+                            <h3 class="font-display font-bold text-white text-xl tracking-tight">${item.item}</h3>
+                            <span class="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${colorClass}">${item.type}</span>
+                        </div>
+                        <p class="text-gray-400 text-sm mb-5 leading-relaxed line-clamp-2">${descText}</p>
+                        <div class="flex justify-between items-center pt-4 border-t border-white/5">
+                            <div class="flex flex-wrap gap-2">
+                                <a href="mailto:${item.email}" class="px-3 py-1.5 rounded-full bg-slate-700 text-gray-300 hover:bg-white hover:text-black transition text-xs font-bold flex items-center gap-1.5"><i class="fa-regular fa-envelope"></i></a>
+                                ${whatsappLink} ${mapBtn} ${pdfBtn} ${shareBtn}
+                            </div>
+                            <span class="text-[10px] text-gray-600 font-mono">${new Date(item.date).toLocaleDateString().slice(0,5)}</span>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+        };
+
+        window.renderLeaderboard = () => {
+            const list = document.getElementById('leaderboardList');
+            list.innerHTML = "";
+            const counts = {};
+            globalData.filter(i => i.type === "Found").forEach(i => { const name = i.email.split('@')[0]; counts[name] = (counts[name] || 0) + 1; });
+            const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 5);
+            if(sorted.length === 0) list.innerHTML = "<li class='text-xs text-gray-500 italic text-center py-4'>Be the first hero!</li>";
+            sorted.forEach(([name, count], index) => {
+                let medal = index === 0 ? "🥇" : (index === 1 ? "🥈" : "🥉");
+                if(index > 2) medal = "✨";
+                list.innerHTML += `<li class="flex justify-between items-center bg-white/5 p-3 rounded-xl mb-2"><div class="flex items-center gap-3"><span class="text-lg">${medal}</span><span class="text-sm font-bold text-gray-300">${name}</span></div><span class="text-xs font-bold bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded">${count} Found</span></li>`;
+            });
+        };
+
+        window.handleSmartUpload = async (input) => {
+            const file = input.files[0];
+            if (!file) return;
+            document.getElementById('fileLabel').innerText = "Analyzing: " + file.name;
+            document.getElementById('aiStatus').classList.remove('hidden-ui');
+            const preview = document.getElementById('aiPreview');
+            const reader = new FileReader();
+            reader.onload = async (e) => { 
+                preview.src = e.target.result; preview.classList.remove('hidden'); 
+                setTimeout(async () => {
+                    let detectedObjects = "", detectedText = "";
+                    try { if(!aiModel) aiModel = await mobilenet.load(); const p = await aiModel.classify(preview); if (p.length > 0) detectedObjects = p[0].className; } catch(err) {}
+                    try { const { data: { text } } = await Tesseract.recognize(preview, 'eng'); detectedText = text.replace(/[^a-zA-Z0-9 ]/g, " ").substring(0, 50); } catch(err) {}
+                    const currentDesc = document.getElementById('r_desc').value;
+                    let appendInfo = "";
+                    if(detectedObjects) appendInfo += ` [Looks like: ${detectedObjects}]`;
+                    if(detectedText.length > 3) appendInfo += ` [Text: "${detectedText}"]`;
+                    document.getElementById('r_desc').value = currentDesc + appendInfo;
+                    document.getElementById('aiStatus').innerHTML = "<i class='fa-solid fa-check text-green-400'></i> Analysis Complete";
+                }, 500);
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.submitReport = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Posting...`;
+            btn.disabled = true;
+            try {
+                let imageUrl = "";
+                const fileInput = document.getElementById('r_image');
+                if(fileInput.files[0]) {
+                    const formData = new FormData(); formData.append('file', fileInput.files[0]); formData.append('upload_preset', UPLOAD_PRESET);
+                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+                    const data = await res.json(); imageUrl = data.secure_url;
+                }
+                let desc = document.getElementById('r_desc').value;
+                const phone = document.getElementById('r_phone').value; if(phone) desc += ` Phone: ${phone}`;
+                const payload = { action: "REPORT", type: document.getElementById('r_type').value, item: document.getElementById('r_item').value, desc: desc, lat: document.getElementById('r_lat').value, lng: document.getElementById('r_lng').value, email: currentUser.email, reporter: currentUser.uid, image: imageUrl };
+                const res = await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
+                const json = await res.json();
+                if(json.result === "success" || json.result === "Success") {
+                    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                    alert("🎉 Report Posted Successfully!");
+                    document.querySelector('form').reset();
+                    document.getElementById('aiPreview').classList.add('hidden');
+                    window.switchTab('feed'); window.fetchData();
+                } else { alert("Error: " + json.message); }
+            } catch(err) { alert("Network Error"); } finally { btn.innerHTML = originalText; btn.disabled = false; }
+        };
+
+        // --- UPDATED MAP LOGIC: USING GOOGLE HYBRID ---
+        function initMap() {
+            if(mapInstance) return;
+            mapInstance = L.map('map').setView(CAMPUS_CENTER, 16);
+            // Google Hybrid Tile Layer
+            L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
+                maxZoom: 20,
+                subdomains:['mt0','mt1','mt2','mt3']
+            }).addTo(mapInstance);
+            
+            mapInstance.on('click', (e) => {
+                if(markerInstance) mapInstance.removeLayer(markerInstance);
+                markerInstance = L.marker(e.latlng).addTo(mapInstance);
+                document.getElementById('r_lat').value = e.latlng.lat; 
+                document.getElementById('r_lng').value = e.latlng.lng;
+                document.getElementById('loc_status').classList.remove('hidden-ui');
+            });
+        }
+
+        function initAdminMap() {
+            if(!document.getElementById('adminMap')) return;
+            setTimeout(() => {
+                if(adminMapInstance) return;
+                adminMapInstance = L.map('adminMap').setView(CAMPUS_CENTER, 16);
+                // Google Hybrid Tile Layer for Admin
+                L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
+                    maxZoom: 20,
+                    subdomains:['mt0','mt1','mt2','mt3']
+                }).addTo(adminMapInstance);
+                
+                const heatPoints = globalData.filter(i => i.type === 'Lost' && i.lat && i.lng).map(i => [parseFloat(i.lat), parseFloat(i.lng), 0.8]);
+                if(heatPoints.length > 0) L.heatLayer(heatPoints, {radius: 40, blur: 20}).addTo(adminMapInstance);
+                
+                const ctx = document.getElementById('statsChart');
+                if(ctx) {
+                    const lost = globalData.filter(i => i.type==='Lost').length;
+                    const found = globalData.filter(i => i.type==='Found').length;
+                    new Chart(ctx, { type: 'doughnut', data: { labels: ['Lost', 'Found'], datasets: [{ data: [lost, found], backgroundColor: ['#f87171', '#34d399'], borderWidth: 0 }] }, options: { plugins: { legend: { display: true, labels: { color: 'white' } } } } });
+                }
+            }, 1000);
+        }
+
+        window.downloadCSV = () => {
+            let csv = "Type,Item,Desc,Email,Date\n"; globalData.forEach(r => csv += `${r.type},${r.item},${r.desc.replace(/,/g," ")},${r.email},${r.date}\n`);
+            const link = document.createElement("a"); link.href = encodeURI("data:text/csv;charset=utf-8,"+csv); link.download = "data.csv"; link.click();
+        };
+
+        window.resolveItem = async (row) => { if(confirm("Mark Resolved?")) { await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "RESOLVE", rowIndex: row, adminEmail: currentUser.email }) }); window.fetchData(); }};
+        window.sendBroadcast = async () => { if(confirm("Send Blast?")) { await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "BROADCAST", subject: document.getElementById('bc_sub').value, message: document.getElementById('bc_msg').value, adminEmail: currentUser.email }) }); alert("Sent!"); }};
+
+        window.switchTab = (tab) => {
+            ['report', 'feed', 'qr', 'support', 'admin'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden-ui');
+                const btn = document.getElementById(`tab-${t}`);
+                if(btn) { btn.classList.remove('btn-primary', 'text-white'); btn.classList.add('text-gray-400'); }
+            });
+            document.getElementById(`view-${tab}`).classList.remove('hidden-ui');
+            const activeBtn = document.getElementById(`tab-${tab}`);
+            activeBtn.classList.remove('text-gray-400'); activeBtn.classList.add('btn-primary', 'text-white');
+            if(tab === 'report') setTimeout(() => mapInstance?.invalidateSize(), 200);
+            if(tab === 'admin') setTimeout(() => adminMapInstance?.invalidateSize(), 200);
+        };
+
+        window.checkSentinel = () => {
+            const item = document.getElementById('r_item').value.toLowerCase();
+            const type = document.getElementById('r_type').value;
+            const alertBox = document.getElementById('sentinelAlert');
+            if(item.length < 3) { alertBox.classList.add('hidden-ui'); return; }
+            const targetType = (type === "Lost") ? "Found" : "Lost";
+            const match = globalData.find(d => d.type === targetType && d.status === "Open" && d.item.toLowerCase().includes(item));
+            if(match) alertBox.classList.remove('hidden-ui'); else alertBox.classList.add('hidden-ui');
+        };
+
+        window.startDictation = () => {
+            if (window.hasOwnProperty('webkitSpeechRecognition')) {
+                const r = new webkitSpeechRecognition(); r.lang = "en-US"; r.start();
+                r.onresult = (e) => { document.getElementById('r_desc').value += " " + e.results[0][0].transcript; };
+            } else alert("Use Chrome for Voice");
+        };
+
+        window.generatePoster = (json) => {
+            const i = JSON.parse(decodeURIComponent(json)); const { jsPDF } = window.jspdf; const doc = new jsPDF();
+            doc.setFillColor(220, 38, 38); doc.rect(0,0,210,40,'F'); doc.setTextColor(255); doc.setFontSize(24); doc.text("MISSING", 105, 25, null, null, "center");
+            doc.setTextColor(0); doc.text(i.item, 105, 60, null, null, "center"); doc.setFontSize(12); doc.text(doc.splitTextToSize(i.desc, 160), 25, 80);
+            if(i.image && !i.image.includes('ERROR')) try { doc.addImage(i.image, 'JPEG', 60, 110, 90, 90); } catch(e){}
+            doc.text("Contact: "+i.email, 105, 250, null, null, "center"); doc.save("poster.pdf");
+        };
+
+        window.createQR = () => {
+            const item = document.getElementById('qr_item').value; if(!item) return;
+            new QRious({ element: document.getElementById('qrcode_canvas'), value: `mailto:${currentUser.email}?subject=Found ${item}`, size: 200 });
+            document.getElementById('qr_output').classList.remove('hidden-ui');
+        };
+        window.printQR = () => {
+            const url = document.getElementById('qrcode_canvas').toDataURL();
+            const w=window.open('',''); w.document.write(`<img src="${url}"><br>Scan to Contact Owner`); w.print();
+        };
+    </script>
+</body>
+</html>
